@@ -21,19 +21,26 @@
 #include "i2c.h"
 
 /* USER CODE BEGIN 0 */
+// maximalny pocet priechodov cakanim, nie cas v milisekundach
 #define I2C_TIMEOUT 1000000U
 
-static uint8_t i2c_wait(uint32_t flag) //static, lebo je urcena na pouzitie iba v i2c.c
+
+// caka na priznak periferie; 0 = uspech, 1 = chyba
+// static spristupni pomocnu funkciu iba v tomto subore
+static uint8_t i2c_wait(uint32_t flag)
 {
     uint32_t timeout = I2C_TIMEOUT;
 
+    // isr je stavovy register stm32; maska flag vyberie pozadovany bit
     while (!(I2C1->ISR & flag))
     {
+        // skonci pri nepotvrdeni prenosu, chybe zbernice alebo strate arbitraze
         if (I2C1->ISR & (I2C_ISR_NACKF |
                          I2C_ISR_BERR |
                          I2C_ISR_ARLO))
             return 1;
 
+        // obmedzenie cakania zabrani nekonecnemu cyklu pri chybe
         if (--timeout == 0)
             return 1;
     }
@@ -41,6 +48,8 @@ static uint8_t i2c_wait(uint32_t flag) //static, lebo je urcena na pouzitie iba 
     return 0;
 }
 
+
+// vymaze zaznamenany stop a chyby, aby neovplyvnili dalsi prenos
 static void i2c_finish(void)
 {
     LL_I2C_ClearFlag_STOP(I2C1);
@@ -49,6 +58,8 @@ static void i2c_finish(void)
     LL_I2C_ClearFlag_ARLO(I2C1);
 }
 
+
+// pri chybe sa pokusi ukoncit obsadenu zbernicu cez stop a vymaze priznaky
 static void i2c_abort(void)
 {
     if (LL_I2C_IsActiveFlag_BUSY(I2C1))
@@ -106,93 +117,115 @@ void MX_I2C1_Init(void)
   LL_I2C_Init(I2C1, &I2C_InitStruct);
   LL_I2C_SetOwnAddress2(I2C1, 0, LL_I2C_OWNADDRESS2_NOMASK);
   /* USER CODE BEGIN I2C1_Init 2 */
-LL_I2C_Enable(I2C1);
+  // povolenie i2c periferie po jej nastaveni
+  LL_I2C_Enable(I2C1);
   /* USER CODE END I2C1_Init 2 */
 
 }
 
 /* USER CODE BEGIN 1 */
+// precita jeden alebo viac bajtov; 0 = uspech, 1 = chyba
+// address je adresa senzora, reg je register, data je ciel a length pocet bajtov
 uint8_t i2c_read(uint8_t address, uint8_t reg,
                  uint8_t *data, uint8_t length)
 {
+    // kontrola cieloveho pola a nenuloveho poctu bajtov
     if (data == 0 || length == 0)
         return 1;
 
     i2c_finish();
 
-    // 1. Posli adresu registra
+    // jeden bajt adresy registra; softend ponecha prenos bez stop
     LL_I2C_HandleTransfer(I2C1, address,
         LL_I2C_ADDRSLAVE_7BIT, 1,
         LL_I2C_MODE_SOFTEND,
         LL_I2C_GENERATE_START_WRITE);
 
+    // txis oznacuje, ze periferia moze prevziat dalsi bajt na odoslanie
     if (i2c_wait(I2C_ISR_TXIS))
         goto error;
 
+    // senzoru posleme adresu registra, s ktorym chceme pracovat
     LL_I2C_TransmitData8(I2C1, reg);
 
+    // cakanie na dokoncenie odoslania adresy registra
     if (i2c_wait(I2C_ISR_TC))
         goto error;
 
-    // 2. Precitaj pozadovany pocet bajtov
+    // opakovany start prepne na citanie; autoend vytvori stop po poslednom bajte
     LL_I2C_HandleTransfer(I2C1, address,
         LL_I2C_ADDRSLAVE_7BIT, length,
         LL_I2C_MODE_AUTOEND,
         LL_I2C_GENERATE_RESTART_7BIT_READ);
 
+
+    // vsetky datove bajty spracujeme v ramci jedneho prenosu
     for (uint8_t i = 0; i < length; i++)
     {
+        // rxne oznacuje prijaty bajt pripraveny na vybratie
         if (i2c_wait(I2C_ISR_RXNE))
             goto error;
 
+        // vybratie prijateho bajtu z periferie do cieloveho pola
         data[i] = LL_I2C_ReceiveData8(I2C1);
     }
 
+    // cakanie na zaznamenanie konca prenosu cez stop
     if (i2c_wait(I2C_ISR_STOPF))
         goto error;
 
     i2c_finish();
     return 0;
 
+// spolocne ukoncenie pri chybe z lubovolnej fazy prenosu
 error:
     i2c_abort();
     return 1;
 }
 
 
+
+// zapise jeden alebo viac bajtov; zdrojove data nemeni, 0 = uspech, 1 = chyba
 uint8_t i2c_write(uint8_t address, uint8_t reg,
                   const uint8_t *data, uint8_t length)
 {
+    // limit je 255 bajtov na prenos, jeden z nich zabera adresa registra
     if (data == 0 || length == 0 || length > 254)
         return 1;
 
     i2c_finish();
 
-    // Register + vsetky datove bajty
+    // jeden bajt adresy registra navyse k odosielanym datam
     LL_I2C_HandleTransfer(I2C1, address,
         LL_I2C_ADDRSLAVE_7BIT, length + 1,
         LL_I2C_MODE_AUTOEND,
         LL_I2C_GENERATE_START_WRITE);
 
+    // txis oznacuje, ze periferia moze prevziat dalsi bajt na odoslanie
     if (i2c_wait(I2C_ISR_TXIS))
         goto error;
 
+    // senzoru posleme adresu registra, s ktorym chceme pracovat
     LL_I2C_TransmitData8(I2C1, reg);
 
+    // vsetky datove bajty spracujeme v ramci jedneho prenosu
     for (uint8_t i = 0; i < length; i++)
     {
+        // txis oznacuje, ze periferia moze prevziat dalsi bajt na odoslanie
         if (i2c_wait(I2C_ISR_TXIS))
             goto error;
 
         LL_I2C_TransmitData8(I2C1, data[i]);
     }
 
+    // cakanie na zaznamenanie konca prenosu cez stop
     if (i2c_wait(I2C_ISR_STOPF))
         goto error;
 
     i2c_finish();
     return 0;
 
+// spolocne ukoncenie pri chybe z lubovolnej fazy prenosu
 error:
     i2c_abort();
     return 1;

@@ -39,9 +39,12 @@ extern "C" {
 void MX_I2C1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-uint8_t i2c_read(uint8_t address, uint8_t reg,    //tieto styri riadky som pridal, aby som mohol pouzivat i2c_read a i2c_write v main.c
+// deklaracie spristupnia vlastne prenosove funkcie aj pre main.c
+// parametre: adresa senzora, register, pole dat a pocet bajtov; 0 = uspech, 1 = chyba
+uint8_t i2c_read(uint8_t address, uint8_t reg,
                  uint8_t *data, uint8_t length);
 
+// const znamena, ze zapis obsah zdrojoveho pola nemeni
 uint8_t i2c_write(uint8_t address, uint8_t reg,
                   const uint8_t *data, uint8_t length);
 /* USER CODE END Prototypes */

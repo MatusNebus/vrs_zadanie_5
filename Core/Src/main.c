@@ -24,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+// rozhrania vlastnych senzorov a snprintf na prevod cisel na text
 #include "lps25hb.h"
 #include "hts221.h"
 #include <stdio.h>
@@ -47,15 +48,20 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+// stav lps25hb: 0 = uspech, 1 = chyba alebo zatial neinicializovany senzor
 uint8_t sensor_ok = 1;
+// aktualny tlak, pociatocny referencny tlak a vyska oproti pociatocnej polohe
 float pressure_hpa = 0;
 float start_pressure = 0;
 float height_m = 0;
 
+// stav hts221: 0 = uspech, 1 = chyba alebo zatial neinicializovany senzor
 uint8_t hts_ok = 1;
+// teplota v stupnoch celzia a relativna vlhkost v percentach
 float temperature_c = 0;
 float humidity_percent = 0;
 
+// miesto pre csv riadok vratane ukoncovacieho znaku textu
 char message[80];
 /* USER CODE END PV */
 
@@ -68,16 +74,20 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-//posiela znak po znaku text cez USART2, cize cez USB do PC
+// posle text cez usart2; do pc ide cez seriovy prevodnik dosky
 void usart_send(char *text)
 {
+    // nulovy znak oznacuje koniec textu a uz sa neposiela
     while (*text)
     {
+        // cakanie na volne miesto vo vysielacom registri
         while (!LL_USART_IsActiveFlag_TXE(USART2));
 
+        // odoslanie aktualneho znaku a posun ukazovatela na dalsi znak
         LL_USART_TransmitData8(USART2, *text++);
     }
 
+    // cakanie na uplne odvysielanie posledneho znaku
     while (!LL_USART_IsActiveFlag_TC(USART2));
 }
 
@@ -122,12 +132,15 @@ int main(void)
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  sensor_ok = lps25hb_init(i2c_read, i2c_write); //inicializacia senzora, posielam mu callbacky na citanie a zapisovanie cez I2C
-  hts_ok = hts221_init(i2c_read, i2c_write); //inicializacia druheho senzora 
+  // inicializacia oboch senzorov a odovzdanie i2c funkcii ako callbackov
+  sensor_ok = lps25hb_init(i2c_read, i2c_write);
+  hts_ok = hts221_init(i2c_read, i2c_write);
   
   if (sensor_ok == 0)
   {
+      // pri merani 1 hz nechame senzoru cas vytvorit prvy vysledok
       LL_mDelay(1200);
+      // & odovzda adresu premennej, do ktorej sa ulozi tlak pre vyskovu nulu
       sensor_ok = lps25hb_read_pressure(&start_pressure);
   }
 
@@ -141,43 +154,50 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    //nacita tlak a vypocita relativnu vysku:
-      if (sensor_ok == 0)
+    if (sensor_ok == 0)
     {
-      //nacita tlak a vypocita relativnu vysku
+      // tlak sa ulozi cez ukazovatel, navratova hodnota oznamuje stav citania
+      // po chybe sa dalsie citanie uz neskusa, automaticka obnova tu nie je
       sensor_ok = lps25hb_read_pressure(&pressure_hpa);
 
       if (sensor_ok == 0)
       {
+        // vypocet vysky oproti pociatocnemu tlaku iba po uspesnom citani
         height_m = lps25hb_relative_height(
             pressure_hpa, start_pressure);
       }
     }
 
-    //citanie teploty a vlhkosti: 
+    // samostatne nacitanie teploty a vlhkosti, ak senzor doteraz nezlyhal
     if (hts_ok == 0)
     {
+        // pri chybe teploty sa vdaka || uz citanie vlhkosti nevykona
         if (hts221_read_temperature(&temperature_c) != 0 ||
             hts221_read_humidity(&humidity_percent) != 0)
         {
+            // chyba zastavi dalsie citanie tohto senzora
             hts_ok = 1;
         }
     }
 
+    // pockame priblizne sekundu; hodnoty sa odoslu az po tomto cakani
     LL_mDelay(1000);
 
-    //prevedie štyri premenné na jeden textový riadok
+    // riadok posleme iba vtedy, ked su oba senzory bez chyby
     if (sensor_ok == 0 && hts_ok == 0)
-  {
-    snprintf(message, sizeof(message),
-             "%.1f,%.0f,%.2f,%.2f\r\n",
-             temperature_c,
-             humidity_percent,
-             pressure_hpa,
-             height_m);
+    {
+      // csv: teplota na 1 miesto, vlhkost bez desatin, tlak a vyska na 2 miesta
+      // sizeof obmedzi velkost textu; \r\n ukonci riadok, snprintf ho este neodosiela
+      snprintf(message, sizeof(message),
+               "%.1f,%.0f,%.2f,%.2f\r\n",
+               temperature_c,
+               humidity_percent,
+               pressure_hpa,
+               height_m);
 
-    usart_send(message); //posle do pocitaca
-  }
+      // hotovy textovy riadok odosleme cez seriovu linku do pc
+      usart_send(message);
+    }
   }
   /* USER CODE END 3 */
 }
