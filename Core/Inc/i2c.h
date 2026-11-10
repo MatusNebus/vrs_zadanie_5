@@ -39,7 +39,11 @@ extern "C" {
 void MX_I2C1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
+uint8_t i2c_read(uint8_t address, uint8_t reg,    //tieto styri riadky som pridal, aby som mohol pouzivat i2c_read a i2c_write v main.c
+                 uint8_t *data, uint8_t length);
 
+uint8_t i2c_write(uint8_t address, uint8_t reg,
+                  const uint8_t *data, uint8_t length);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

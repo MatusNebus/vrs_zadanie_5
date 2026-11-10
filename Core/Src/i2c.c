@@ -21,7 +21,41 @@
 #include "i2c.h"
 
 /* USER CODE BEGIN 0 */
+#define I2C_TIMEOUT 1000000U
 
+static uint8_t i2c_wait(uint32_t flag) //static, lebo je urcena na pouzitie iba v i2c.c
+{
+    uint32_t timeout = I2C_TIMEOUT;
+
+    while (!(I2C1->ISR & flag))
+    {
+        if (I2C1->ISR & (I2C_ISR_NACKF |
+                         I2C_ISR_BERR |
+                         I2C_ISR_ARLO))
+            return 1;
+
+        if (--timeout == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+static void i2c_finish(void)
+{
+    LL_I2C_ClearFlag_STOP(I2C1);
+    LL_I2C_ClearFlag_NACK(I2C1);
+    LL_I2C_ClearFlag_BERR(I2C1);
+    LL_I2C_ClearFlag_ARLO(I2C1);
+}
+
+static void i2c_abort(void)
+{
+    if (LL_I2C_IsActiveFlag_BUSY(I2C1))
+        LL_I2C_GenerateStopCondition(I2C1);
+
+    i2c_finish();
+}
 /* USER CODE END 0 */
 
 /* I2C1 init function */
@@ -78,6 +112,90 @@ void MX_I2C1_Init(void)
 }
 
 /* USER CODE BEGIN 1 */
+uint8_t i2c_read(uint8_t address, uint8_t reg,
+                 uint8_t *data, uint8_t length)
+{
+    if (data == 0 || length == 0)
+        return 1;
 
+    i2c_finish();
+
+    // 1. Posli adresu registra
+    LL_I2C_HandleTransfer(I2C1, address,
+        LL_I2C_ADDRSLAVE_7BIT, 1,
+        LL_I2C_MODE_SOFTEND,
+        LL_I2C_GENERATE_START_WRITE);
+
+    if (i2c_wait(I2C_ISR_TXIS))
+        goto error;
+
+    LL_I2C_TransmitData8(I2C1, reg);
+
+    if (i2c_wait(I2C_ISR_TC))
+        goto error;
+
+    // 2. Precitaj pozadovany pocet bajtov
+    LL_I2C_HandleTransfer(I2C1, address,
+        LL_I2C_ADDRSLAVE_7BIT, length,
+        LL_I2C_MODE_AUTOEND,
+        LL_I2C_GENERATE_RESTART_7BIT_READ);
+
+    for (uint8_t i = 0; i < length; i++)
+    {
+        if (i2c_wait(I2C_ISR_RXNE))
+            goto error;
+
+        data[i] = LL_I2C_ReceiveData8(I2C1);
+    }
+
+    if (i2c_wait(I2C_ISR_STOPF))
+        goto error;
+
+    i2c_finish();
+    return 0;
+
+error:
+    i2c_abort();
+    return 1;
+}
+
+
+uint8_t i2c_write(uint8_t address, uint8_t reg,
+                  const uint8_t *data, uint8_t length)
+{
+    if (data == 0 || length == 0 || length > 254)
+        return 1;
+
+    i2c_finish();
+
+    // Register + vsetky datove bajty
+    LL_I2C_HandleTransfer(I2C1, address,
+        LL_I2C_ADDRSLAVE_7BIT, length + 1,
+        LL_I2C_MODE_AUTOEND,
+        LL_I2C_GENERATE_START_WRITE);
+
+    if (i2c_wait(I2C_ISR_TXIS))
+        goto error;
+
+    LL_I2C_TransmitData8(I2C1, reg);
+
+    for (uint8_t i = 0; i < length; i++)
+    {
+        if (i2c_wait(I2C_ISR_TXIS))
+            goto error;
+
+        LL_I2C_TransmitData8(I2C1, data[i]);
+    }
+
+    if (i2c_wait(I2C_ISR_STOPF))
+        goto error;
+
+    i2c_finish();
+    return 0;
+
+error:
+    i2c_abort();
+    return 1;
+}
 /* USER CODE END 1 */
 
