@@ -55,6 +55,8 @@ float height_m = 0;
 uint8_t hts_ok = 1;
 float temperature_c = 0;
 float humidity_percent = 0;
+
+char message[80];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -164,6 +166,18 @@ int main(void)
 
     LL_mDelay(1000);
 
+    //prevedie štyri premenné na jeden textový riadok
+    if (sensor_ok == 0 && hts_ok == 0)
+  {
+    snprintf(message, sizeof(message),
+             "%.1f,%.0f,%.2f,%.2f\r\n",
+             temperature_c,
+             humidity_percent,
+             pressure_hpa,
+             height_m);
+
+    usart_send(message); //posle do pocitaca
+  }
   }
   /* USER CODE END 3 */
 }
