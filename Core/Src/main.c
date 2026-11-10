@@ -19,12 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lps25hb.h"
 #include "hts221.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -63,6 +65,19 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+//posiela znak po znaku text cez USART2, cize cez USB do PC
+void usart_send(char *text)
+{
+    while (*text)
+    {
+        while (!LL_USART_IsActiveFlag_TXE(USART2));
+
+        LL_USART_TransmitData8(USART2, *text++);
+    }
+
+    while (!LL_USART_IsActiveFlag_TC(USART2));
+}
 
 /* USER CODE END 0 */
 
@@ -103,6 +118,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   sensor_ok = lps25hb_init(i2c_read, i2c_write); //inicializacia senzora, posielam mu callbacky na citanie a zapisovanie cez I2C
   hts_ok = hts221_init(i2c_read, i2c_write); //inicializacia druheho senzora 
