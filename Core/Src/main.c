@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "lps25hb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,7 +44,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t sensor_ok = 1;
+float pressure_hpa = 0;
+float start_pressure = 0;
+float height_m = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -96,6 +99,13 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+sensor_ok = lps25hb_init(i2c_read, i2c_write); //inicializacia senzora, posielam mu callbacky na citanie a zapisovanie cez I2C
+
+if (sensor_ok == 0)
+{
+    LL_mDelay(1200);
+    sensor_ok = lps25hb_read_pressure(&start_pressure);
+}
 
   /* USER CODE END 2 */
 
@@ -106,6 +116,20 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+      if (sensor_ok == 0)
+    {
+      //nacita tlak a vypocita relativnu vysku
+      sensor_ok = lps25hb_read_pressure(&pressure_hpa);
+
+      if (sensor_ok == 0)
+      {
+        height_m = lps25hb_relative_height(
+            pressure_hpa, start_pressure);
+      }
+    }
+
+    LL_mDelay(1000);
+
   }
   /* USER CODE END 3 */
 }
