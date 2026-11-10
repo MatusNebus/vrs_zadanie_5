@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lps25hb.h"
+#include "hts221.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,6 +49,10 @@ uint8_t sensor_ok = 1;
 float pressure_hpa = 0;
 float start_pressure = 0;
 float height_m = 0;
+
+uint8_t hts_ok = 1;
+float temperature_c = 0;
+float humidity_percent = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,13 +104,14 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-sensor_ok = lps25hb_init(i2c_read, i2c_write); //inicializacia senzora, posielam mu callbacky na citanie a zapisovanie cez I2C
-
-if (sensor_ok == 0)
-{
-    LL_mDelay(1200);
-    sensor_ok = lps25hb_read_pressure(&start_pressure);
-}
+  sensor_ok = lps25hb_init(i2c_read, i2c_write); //inicializacia senzora, posielam mu callbacky na citanie a zapisovanie cez I2C
+  hts_ok = hts221_init(i2c_read, i2c_write); //inicializacia druheho senzora 
+  
+  if (sensor_ok == 0)
+  {
+      LL_mDelay(1200);
+      sensor_ok = lps25hb_read_pressure(&start_pressure);
+  }
 
   /* USER CODE END 2 */
 
@@ -116,6 +122,8 @@ if (sensor_ok == 0)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    //nacita tlak a vypocita relativnu vysku:
       if (sensor_ok == 0)
     {
       //nacita tlak a vypocita relativnu vysku
@@ -126,6 +134,16 @@ if (sensor_ok == 0)
         height_m = lps25hb_relative_height(
             pressure_hpa, start_pressure);
       }
+    }
+
+    //citanie teploty a vlhkosti: 
+    if (hts_ok == 0)
+    {
+        if (hts221_read_temperature(&temperature_c) != 0 ||
+            hts221_read_humidity(&humidity_percent) != 0)
+        {
+            hts_ok = 1;
+        }
     }
 
     LL_mDelay(1000);
