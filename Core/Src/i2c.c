@@ -106,7 +106,7 @@ void MX_I2C1_Init(void)
   LL_I2C_Init(I2C1, &I2C_InitStruct);
   LL_I2C_SetOwnAddress2(I2C1, 0, LL_I2C_OWNADDRESS2_NOMASK);
   /* USER CODE BEGIN I2C1_Init 2 */
-
+LL_I2C_Enable(I2C1);
   /* USER CODE END I2C1_Init 2 */
 
 }
