@@ -7,7 +7,7 @@
 #define LPS25HB_ADDRESS       (0x5D << 1)
 
 // Registre senzora
-#define LPS25HB_WHO_AM_I      0x0F
+#define LPS25HB_WHO_AM_I     0x0F
 #define LPS25HB_ID           0xBD
 #define LPS25HB_CTRL_REG1    0x20
 #define LPS25HB_PRESS_OUT_XL 0x28
